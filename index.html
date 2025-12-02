@@ -1,42 +1,37 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Ysabella Boutique - Sistema de Ventas</title>
-    <link rel="stylesheet" href="css/style.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ventas Boutique</title>
+
+    <!-- Vincular CSS -->
+    <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+    <h1>Sistema de Ventas - Boutique Ysabella</h1>
 
-    <h1>Ysabella Boutique - Sistema de Ventas</h1>
-
-    <div class="contenedor">
-        <h2>Registrar Venta</h2>
-
-        <label>Producto:</label>
-        <input type="text" id="producto">
-
-        <label>Precio:</label>
-        <input type="number" id="precio">
-
-        <label>Cantidad:</label>
-        <input type="number" id="cantidad">
-
+    <div class="formulario">
+        <input type="text" id="producto" placeholder="Nombre del producto">
+        <input type="number" id="precio" placeholder="Precio">
+        <input type="number" id="cantidad" placeholder="Cantidad">
         <button onclick="agregarVenta()">Agregar Venta</button>
-
-        <h2>Historial de Ventas</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Cantidad</th>
-                    <th>Total</th>
-                </tr>
-            </thead>
-            <tbody id="tablaVentas"></tbody>
-        </table>
     </div>
 
+    <table>
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Precio</th>
+                <th>Cantidad</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody id="tablaVentas"></tbody>
+    </table>
+
+    <!-- Vincular JavaScript -->
     <script src="js/app.js"></script>
 </body>
 </html>
+
