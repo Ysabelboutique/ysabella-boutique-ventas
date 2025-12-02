@@ -1,6 +1,10 @@
 <!doctype html>
 <html lang="es">
 <head>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Mi boutique — V4 (Reconstruido)</title>
@@ -1124,6 +1128,207 @@ console.log("Firebase inicializado. Conectando a Firestore...");
 })();
 </script>
 <!-- END FIREBASE AUTH -->
+
+
+<!-- REALTIME FIREBASE INTEGRATION - ADDED BY ASSISTANT -->
+<!-- This script ensures realtime onSnapshot listeners, avoids using localStorage as source of truth,
+     forces fresh download (anti-cache meta tags above), and initializes Firebase using your config. -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  try{
+    // Protect against accidental localStorage resurrection: no-op specific keys if present
+    const protectedKeys = ['inventory','transactions','ysabella_app_state','yb_local_sync'];
+    protectedKeys.forEach(k=>{
+      try{ localStorage.removeItem(k); }catch(e){}
+    });
+    // override setItem/getItem for those keys to avoid writes
+    const originalSet = localStorage.setItem.bind(localStorage);
+    const originalGet = localStorage.getItem.bind(localStorage);
+    localStorage.setItem = function(key,val){
+      if(protectedKeys.includes(key)) return;
+      return originalSet(key,val);
+    };
+    localStorage.getItem = function(key){
+      if(protectedKeys.includes(key)) return null;
+      return originalGet(key);
+    };
+  }catch(e){ console.warn("localStorage protection error",e); }
+
+  // Wait until firebase libs are loaded
+  function waitForFirebaseLibs(timeoutMs=10000){
+    return new Promise((resolve,reject)=>{
+      const start = Date.now();
+      (function check(){
+        if(window.firebase && window.firebase.firestore && window.firebase.auth) return resolve();
+        if(Date.now()-start > timeoutMs) return reject(new Error("Firebase libs not loaded"));
+        setTimeout(check,150);
+      })();
+    });
+  }
+
+  // Your firebase config (kept from original file)
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyB31zH-qx6PXzNDw5SofaHa1zMPM_6NiqQ",
+    authDomain: "ysabella-boutique-cajamarca.firebaseapp.com",
+    projectId: "ysabella-boutique-cajamarca",
+    storageBucket: "ysabella-boutique-cajamarca.appspot.com",
+    messagingSenderId: "975041063668",
+    appId: "1:975041063668:web:efe005795f713139744ca1"
+  };
+
+  waitForFirebaseLibs().then(()=>{
+    // Initialize app only if not initialized
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Enable persistence if possible (but catch failures)
+    db.enablePersistence({synchronizeTabs:true}).catch(err=>{
+      console.warn("Persistence not enabled:", err);
+    });
+
+    // Utility: safe DOM selector
+    const $ = id => document.getElementById(id);
+
+    // Functions to update UI - try to use existing elements by common ids,
+    // if they don't exist log the data to console so you can map the fields.
+    function renderInventorySnapshot(snapshot){
+      try{
+        const tbody = document.querySelector('#inventory-table tbody') || document.querySelector('#inventoryBody') || null;
+        const select = document.getElementById('sale-product') || document.getElementById('productSelect');
+        if(tbody) tbody.innerHTML = '';
+        if(select) {
+          select.innerHTML = '<option value="">-- Seleccione producto --</option>';
+        }
+        snapshot.forEach(doc=>{
+          if(doc.id === '_init') return;
+          const d = doc.data();
+          // append to table if exists
+          if(tbody){
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${d.name||''}</td><td>${d.price||0}</td><td>${d.stock||0}</td>`;
+            tbody.appendChild(tr);
+          }
+          // append to select if exists
+          if(select){
+            const opt = document.createElement('option');
+            opt.value = doc.id;
+            opt.textContent = `${d.name} (S/${d.price}) - stock ${d.stock}`;
+            select.appendChild(opt);
+          }
+        });
+      }catch(e){ console.error("renderInventorySnapshot error", e); }
+    }
+
+    function renderTransactionsSnapshot(snapshot){
+      try{
+        const tbody = document.getElementById('tablaVentas') || document.querySelector('#transactions-table tbody') || document.getElementById('transactionsBody');
+        if(tbody) tbody.innerHTML = '';
+        snapshot.forEach(doc=>{
+          if(doc.id === '_init') return;
+          const d = doc.data();
+          const tr = document.createElement('tr');
+          tr.dataset.id = doc.id;
+          // adapt to typical columns
+          tr.innerHTML = `<td>${d.productName||d.name||''}</td><td>${d.price||''}</td><td>${d.qty||d.quantity||''}</td><td>${d.total||''}</td><td>${d.date && d.date.toDate ? d.date.toDate().toLocaleString() : (d.date||'')}</td><td><button data-id="${doc.id}" class="btn-del-tx">Eliminar</button></td>`;
+          if(tbody) tbody.appendChild(tr);
+        });
+        // wire delete buttons
+        document.querySelectorAll('.btn-del-tx').forEach(b=>{
+          b.onclick = function(){ const id=this.dataset.id; if(!confirm('Eliminar transacción?')) return; db.collection('transactions').doc(id).delete().catch(console.error); };
+        });
+      }catch(e){ console.error("renderTransactionsSnapshot error", e); }
+    }
+
+    // Start real-time listeners when authenticated
+    let unsubInv=null, unsubTx=null;
+    function startListeners(){
+      if(unsubInv) unsubInv();
+      if(unsubTx) unsubTx();
+      // inventory
+      unsubInv = db.collection('inventory').orderBy('name').onSnapshot(snap=>{
+        console.log('inventory snapshot', snap.size);
+        renderInventorySnapshot(snap);
+      }, err=>console.error('inventory snapshot error', err));
+      // transactions
+      unsubTx = db.collection('transactions').orderBy('createdAt','desc').limit(200).onSnapshot(snap=>{
+        console.log('transactions snapshot', snap.size);
+        renderTransactionsSnapshot(snap);
+      }, err=>console.error('transactions snapshot error', err));
+    }
+
+    // Auth state
+    auth.onAuthStateChanged(user=>{
+      if(user){
+        console.log('Usuario autenticado:', user.email || user.uid);
+        // remove any local caches used previously
+        try{ ['inventory','transactions','ysabella_app_state'].forEach(k=>localStorage.removeItem(k)); }catch(e){}
+        startListeners();
+      } else {
+        console.log('No autenticado');
+        // stop listeners
+        if(unsubInv) unsubInv(), unsubInv=null;
+        if(unsubTx) unsubTx(), unsubTx=null;
+      }
+    });
+
+    // Hook up UI forms/buttons if they exist in your page
+    // Add product
+    const addProdBtn = document.getElementById('btn-add-product') || document.getElementById('addProductBtn');
+    if(addProdBtn){
+      addProdBtn.addEventListener('click', async ()=>{
+        const name = (document.getElementById('prod-name') || {}).value || '';
+        const price = parseFloat((document.getElementById('prod-price') || {}).value || 0) || 0;
+        const stock = parseInt((document.getElementById('prod-stock') || {}).value || 0) || 0;
+        if(!name) return alert('Ingrese nombre');
+        try{
+          await db.collection('inventory').add({ name, price, stock });
+          (document.getElementById('prod-name')||{}).value=''; (document.getElementById('prod-price')||{}).value=''; (document.getElementById('prod-stock')||{}).value='';
+        }catch(e){ console.error('add product error', e); alert('Error al guardar producto'); }
+      });
+    }
+
+    // Add sale
+    const addSaleBtn = document.getElementById('btn-add-sale') || document.getElementById('btn-add-sale');
+    if(addSaleBtn){
+      addSaleBtn.addEventListener('click', async ()=>{
+        const prodId = (document.getElementById('sale-product') || {}).value || '';
+        const qty = parseInt((document.getElementById('sale-qty') || {}).value || 0) || 0;
+        if(!prodId || qty<=0) return alert('Seleccione producto y cantidad valida');
+        try{
+          const docRef = db.collection('inventory').doc(prodId);
+          await db.runTransaction(async t=>{
+            const snap = await t.get(docRef);
+            if(!snap.exists) throw new Error('Producto no existe');
+            const data = snap.data();
+            if((data.stock||0) < qty) throw new Error('Stock insuficiente');
+            t.update(docRef, { stock: (data.stock||0) - qty });
+            t.set(db.collection('transactions').doc(), {
+              type: 'venta',
+              productId: prodId,
+              productName: data.name,
+              qty: qty,
+              total: (data.price||0)*qty,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              user: auth.currentUser ? auth.currentUser.email : null
+            });
+          });
+          (document.getElementById('sale-qty')||{}).value='';
+          alert('Venta registrada');
+        }catch(e){ console.error('add sale error', e); alert(e.message || 'Error al registrar venta'); }
+      });
+    }
+
+    console.log('Realtime Firebase helper initialized.');
+  }).catch(err=>{
+    console.error('Firebase libs load error', err);
+  });
+})();
+</script>
+<!-- END REALTIME FIREBASE INTEGRATION -->
 
 </body>
 </html>
