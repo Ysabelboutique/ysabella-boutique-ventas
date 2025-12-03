@@ -973,7 +973,7 @@ console.log("Firebase inicializado. Conectando a Firestore...");
     const txCol = FB_DB.collection('transactions');
 
     // inventory snapshot
-    invCol.onSnapshot(snapshot=>{
+    invCol.onSnapshot({includeMetadataChanges:true}, snapshot=>{
       const docs = [];
       snapshot.forEach(doc => docs.push(doc.data()));
       if(docs.length){
@@ -987,7 +987,7 @@ console.log("Firebase inicializado. Conectando a Firestore...");
     }, err=> console.error('Firestore inventory snapshot error', err));
 
     // transactions snapshot
-    txCol.onSnapshot(snapshot=>{
+    txCol.onSnapshot({includeMetadataChanges:true}, snapshot=>{
       const docs = [];
       snapshot.forEach(doc => docs.push(doc.data()));
       if(docs.length){
@@ -1168,7 +1168,8 @@ console.log("Firebase inicializado. Conectando a Firestore...");
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     const auth = firebase.auth();
     const db = firebase.firestore();
-    db.enablePersistence({synchronizeTabs:true}).catch(()=>console.warn("persistence not available"));
+    /* Persistence disabled for better realtime sync across devices in this build. */
+// db.enablePersistence({synchronizeTabs:true}).catch(()=>console.warn("persistence not available"));
 
     // realtime listeners
     let unsubInv=null, unsubTx=null, unsubPurch=null;
@@ -1223,9 +1224,9 @@ console.log("Firebase inicializado. Conectando a Firestore...");
       if(unsubInv) unsubInv();
       if(unsubTx) unsubTx();
       if(unsubPurch) unsubPurch();
-      unsubInv = db.collection('inventory').orderBy('name').onSnapshot(renderInventory, err=>console.error('inventory snapshot error',err));
-      unsubTx = db.collection('transactions').orderBy('createdAt','desc').limit(200).onSnapshot(renderTransactions, err=>console.error('transactions snapshot error',err));
-      unsubPurch = db.collection('purchases').orderBy('createdAt','desc').limit(200).onSnapshot(renderPurchases, err=>console.error('purchases snapshot error',err));
+      unsubInv = db.collection('inventory').orderBy('name').onSnapshot({includeMetadataChanges:true}, renderInventory, err=>console.error('inventory snapshot error',err));
+      unsubTx = db.collection('transactions').orderBy('createdAt','desc').limit(200).onSnapshot({includeMetadataChanges:true}, renderTransactions, err=>console.error('transactions snapshot error',err));
+      unsubPurch = db.collection('purchases').orderBy('createdAt','desc').limit(200).onSnapshot({includeMetadataChanges:true}, renderPurchases, err=>console.error('purchases snapshot error',err));
       console.log('Realtime listeners active');
     }
 
